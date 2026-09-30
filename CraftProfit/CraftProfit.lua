@@ -280,17 +280,21 @@ local function ReadReplicate()
   local n = (A.GetNumReplicateItems and A.GetNumReplicateItems()) or 0
   local best = {}
   local i = 0
-  local function chunk()
-    local stop = math.min(i + 2000, n)
+  local function read(index)
+    local _, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemID = A.GetReplicateItemInfo(index)
+    if type(itemID) == "number" and type(buyout) == "number" and buyout > 0 and type(count) == "number" and count > 0 then
+      local each = buyout / count
+      if not best[itemID] or each < best[itemID] then best[itemID] = each end
+    end
+  end
+  local chunk
+  function chunk()
+    local stop = math.min(i + 400, n)
     while i < stop do
-      local info = { A.GetReplicateItemInfo(i) }
-      local count, buyout, itemID = info[3], info[10], info[17]
-      if itemID and buyout and buyout > 0 and count and count > 0 then
-        local each = buyout / count
-        if not best[itemID] or each < best[itemID] then best[itemID] = each end
-      end
+      pcall(read, i)   -- one odd auction shouldn't stop the whole scan
       i = i + 1
     end
+    if scan and scan.kind == "full" then scan.read = i scan.total = n UpdateUI() end
     if i < n and C_Timer and C_Timer.After then C_Timer.After(0, chunk) return end
     local items = 0
     for itemID, p in pairs(best) do SetAH(itemID, p) items = items + 1 end
@@ -386,7 +390,23 @@ local function Button(text, width, onClick)
 end
 win.scanRecipes = Button("Scan recipes", 110, StartRecipeScan)
 win.scanRecipes:SetPoint("BOTTOMLEFT", 10, 10)
-win.scanFull = Button("Full scan", 90, StartFullScan)
+if StaticPopupDialogs then
+  StaticPopupDialogs["CRAFTPROFIT_FULLSCAN"] = {
+    text = "Full scan downloads every auction on the auction house. The game can freeze for up to a minute, "
+        .. "and you can only do it every 15 minutes.\n\nScan recipes is usually enough. Do a full scan anyway?",
+    button1 = "Full scan", button2 = "Cancel",
+    OnAccept = function() StartFullScan() end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+  }
+end
+local function ConfirmFullScan()
+  if StaticPopup_Show and StaticPopupDialogs and StaticPopupDialogs.CRAFTPROFIT_FULLSCAN then
+    StaticPopup_Show("CRAFTPROFIT_FULLSCAN")
+  else
+    StartFullScan()
+  end
+end
+win.scanFull = Button("Full scan", 90, ConfirmFullScan)
 win.scanFull:SetPoint("LEFT", win.scanRecipes, "RIGHT", 6, 0)
 win.makeable = CreateFrame("CheckButton", nil, win, "UICheckButtonTemplate")
 win.makeable:SetSize(24, 24)
@@ -536,7 +556,8 @@ function UpdateUI()
   if scan and scan.kind == "recipes" then
     status = "Scanning " .. math.min(scan.index, scan.total) .. " of " .. scan.total .. "..."
   elseif scan and scan.kind == "full" then
-    status = "Full scan in progress..."
+    status = scan.read and ("Full scan: reading " .. scan.read .. " of " .. scan.total .. " auctions...")
+             or "Full scan: waiting for the server (the game may freeze for a bit)..."
   elseif #rows == 0 then
     status = CraftProfitDB.onlyMakeable and "Nothing you can make from your bags right now."
              or "No recipes yet - open your profession window once."
