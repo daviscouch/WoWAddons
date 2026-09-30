@@ -444,6 +444,7 @@ for i = 1, ROWS do
   row:SetSize(WIDTH - 16, ROW_H)
   row:SetPoint("TOPLEFT", 8, -66 - (i - 1) * ROW_H)
   row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+  row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   row.icon = row:CreateTexture(nil, "ARTWORK")
   row.icon:SetSize(18, 18)
   row.icon:SetPoint("LEFT", 4, 0)
@@ -504,7 +505,12 @@ local function ReagentTooltip(row)
   else
     GameTooltip:AddLine("No auction price yet - scan at the AH.", 1, 0.4, 0.4)
   end
-  GameTooltip:AddLine(ahOpen and "Shift-click: search the auction house for it" or "Shift-click: link it in chat", 0.5, 0.8, 1)
+  if ahOpen then
+    GameTooltip:AddLine("Shift-click: search the auction house for it", 0.5, 0.8, 1)
+    GameTooltip:AddLine("Shift-right-click: search its reagents, one per click", 0.5, 0.8, 1)
+  else
+    GameTooltip:AddLine("Shift-click: link it in chat", 0.5, 0.8, 1)
+  end
   GameTooltip:Show()
 end
 
@@ -523,9 +529,30 @@ local function SearchAH(name)
   return ok
 end
 
-local function RowClick(row)
+-- Shift-right-click steps through a recipe's reagents (skipping ones you buy from a vendor)
+local reagentStep = {}   -- recipe id -> last reagent searched
+local function SearchReagent(r)
+  if not ahOpen then Say("Open the auction house to search for reagents.") return end
+  local list = {}
+  for _, g in ipairs(r.reagents) do
+    local _, source = ReagentPrice(g.itemID)
+    if source ~= "vendor" then list[#list + 1] = g end
+  end
+  if #list == 0 then Say("All of " .. r.name .. "'s reagents come from vendors.") return end
+  local step = (reagentStep[r.id] or 0) % #list + 1
+  reagentStep[r.id] = step
+  local g = list[step]
+  local name = (GetInfo(g.itemID)) or ("item " .. g.itemID)
+  if SearchAH(name) then
+    Say("Reagent " .. step .. " of " .. #list .. " for " .. r.name .. ": " .. name .. " (need " .. g.count .. ")"
+        .. (#list > 1 and " - shift-right-click again for the next." or "."))
+  end
+end
+
+local function RowClick(row, button)
   local r = row.recipe
   if not r or not (IsShiftKeyDown and IsShiftKeyDown()) then return end
+  if button == "RightButton" then return SearchReagent(r) end
   local name, link = GetInfo(r.output)
   name = name or r.name
   if SearchAH(name) then return end

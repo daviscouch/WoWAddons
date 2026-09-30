@@ -198,8 +198,24 @@ searched = nil
 win.rows[2]:GetScript("OnClick")(win.rows[2])
 T.ok("shift-click with the AH closed: links it in chat instead", searched == nil and linked and linked:find("Light Armor Kit", 1, true),
      tostring(linked))
-M.state.shift = false
 AuctionHouseFrame.shown = true
+-- Shift-right-click: step through reagents. Boots = 2 Light Leather (AH) + 1 Coarse Thread (vendor, skipped)
+M.clearPrinted()
+win.rows[1]:GetScript("OnClick")(win.rows[1], "RightButton")
+T.ok("shift-right-click searches a reagent", searched == "Light Leather"
+     and M.printedText():find("Reagent 1 of 1 for Handstitched Leather Boots: Light Leather (need 2).", 1, true), M.printedText())
+searched = nil
+win.rows[1]:GetScript("OnClick")(win.rows[1], "RightButton")
+T.ok("...vendor reagents are skipped, so it stays on Light Leather", searched == "Light Leather", tostring(searched))
+-- Cured Light Hide: Light Hide + Salt (vendor) -> only Light Hide to search
+M.clearPrinted()
+local cured
+for i = 1, 3 do if rowText(i):find("^Cured Light Hide") then cured = win.rows[i] end end
+cured:GetScript("OnClick")(cured, "RightButton")
+local first = searched
+cured:GetScript("OnClick")(cured, "RightButton")
+T.ok("stepping repeats when there's only one AH reagent", first == "Light Hide" and searched == "Light Hide", tostring(first) .. "," .. tostring(searched))
+M.state.shift = false
 
 -- Show unlearned recipes (only for professions you have)
 win.unlearned:SetChecked(true)
