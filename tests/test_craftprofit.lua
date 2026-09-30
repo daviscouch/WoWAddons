@@ -178,6 +178,29 @@ M.clearPrinted()
 SLASH("fullscan")
 T.ok("full scan again right away: explains the 15 minute limit", M.printedText():find("try again in 15 min", 1, true), M.printedText())
 
+-- Shift-click a row: search the auction house for the crafted item
+local searched, started, linked, mode = nil, false, nil, nil
+AuctionHouseFrameDisplayMode = { Buy = "buy" }
+AuctionHouseFrame = setmetatable({ shown = true, SearchBar = {
+  SearchBox = { SetText = function(_, t) searched = t end },
+  StartSearch = function() started = true end,
+} }, getmetatable(win))
+AuctionHouseFrame.SetDisplayMode = function(_, m) mode = m end
+function HandleModifiedItemClick(link) linked = link end
+win.rows[1]:GetScript("OnClick")(win.rows[1])
+T.ok("plain click does nothing", searched == nil and linked == nil)
+M.state.shift = true
+win.rows[1]:GetScript("OnClick")(win.rows[1])
+T.ok("shift-click with the AH open: searches for the crafted item on the Buy tab",
+     searched == "Handstitched Leather Boots" and started and mode == "buy", tostring(searched))
+AuctionHouseFrame.shown = false
+searched = nil
+win.rows[2]:GetScript("OnClick")(win.rows[2])
+T.ok("shift-click with the AH closed: links it in chat instead", searched == nil and linked and linked:find("Light Armor Kit", 1, true),
+     tostring(linked))
+M.state.shift = false
+AuctionHouseFrame.shown = true
+
 -- Show unlearned recipes (only for professions you have)
 win.unlearned:SetChecked(true)
 win.unlearned:GetScript("OnClick")(win.unlearned)

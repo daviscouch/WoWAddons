@@ -504,7 +504,33 @@ local function ReagentTooltip(row)
   else
     GameTooltip:AddLine("No auction price yet - scan at the AH.", 1, 0.4, 0.4)
   end
+  GameTooltip:AddLine(ahOpen and "Shift-click: search the auction house for it" or "Shift-click: link it in chat", 0.5, 0.8, 1)
   GameTooltip:Show()
+end
+
+-- Put an item's name in the auction house search bar and search (Buy tab)
+local function SearchAH(name)
+  local frame = AuctionHouseFrame
+  if not (name and frame and frame.IsShown and frame:IsShown() and frame.SearchBar) then return false end
+  local ok = pcall(function()
+    if frame.SetDisplayMode and AuctionHouseFrameDisplayMode and AuctionHouseFrameDisplayMode.Buy then
+      frame:SetDisplayMode(AuctionHouseFrameDisplayMode.Buy)
+    end
+    local bar = frame.SearchBar
+    if bar.SearchBox then bar.SearchBox:SetText(name) end
+    if bar.StartSearch then bar:StartSearch() end
+  end)
+  return ok
+end
+
+local function RowClick(row)
+  local r = row.recipe
+  if not r or not (IsShiftKeyDown and IsShiftKeyDown()) then return end
+  local name, link = GetInfo(r.output)
+  name = name or r.name
+  if SearchAH(name) then return end
+  -- Auction house closed: normal shift-click (links it in chat)
+  if link and HandleModifiedItemClick then pcall(HandleModifiedItemClick, link) end
 end
 
 function UpdateUI()
@@ -543,6 +569,7 @@ function UpdateUI()
       end
       row.cells[5]:SetText((not r.learned) and "|cff888888not learned|r" or (e.canMake > 0 and e.canMake or "|cff8888880|r"))
       row:SetScript("OnEnter", ReagentTooltip)
+      row:SetScript("OnClick", RowClick)
       row:SetScript("OnLeave", function() GameTooltip:Hide() end)
       row:Show()
     else
