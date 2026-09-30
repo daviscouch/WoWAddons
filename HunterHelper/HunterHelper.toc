@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: HunterHelper
+## Notes: Hunter reminders: low ammo, hungry pet (with a Feed button), and no Aspect active.
+## Author: Davis
+## Version: 0.1.0
+## SavedVariables: HunterHelperDB
+
+Foods.lua
+HunterHelper.lua

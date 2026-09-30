@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: TidyVendor
+## Notes: Sells your grey items and repairs your gear automatically at vendors.
+## Author: Davis
+## Version: 0.1.0
+## SavedVariables: TidyVendorDB
+
+TidyVendor.lua

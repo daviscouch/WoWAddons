@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: TalentGuide
+## Notes: Shows where your next talent point goes in your chosen build, with a one-click Learn button.
+## Author: Davis
+## Version: 0.1.0
+## SavedVariables: TalentGuideDB
+
+Builds.lua
+TalentGuide.lua

@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: CraftProfit
+## Notes: Shows what your recipes cost to make and what they sell for on the auction house.
+## Author: Davis
+## Version: 0.1.0
+## SavedVariables: CraftProfitDB
+
+CraftProfit.lua
