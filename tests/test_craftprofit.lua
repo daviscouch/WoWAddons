@@ -141,6 +141,33 @@ T.ok("'only what I can make' hides recipes you lack reagents for", win.total == 
 win.makeable:SetChecked(false)
 win.makeable:GetScript("OnClick")(win.makeable)
 
+-- Count my mats as free (bags: 5 Light Leather, 1 Coarse Thread)
+win.ownMats:SetChecked(true)
+win.ownMats:GetScript("OnClick")(win.ownMats)
+T.ok("own mats: boots cost nothing (you have the leather and thread)", rowText(1) == "Handstitched Leather Boots | 0c | 3s 80c | +3s 80c | 1", rowText(1))
+T.ok("own mats: armor kit too", rowText(2) == "Light Armor Kit | 0c | 1s 43c | +1s 43c | 5", rowText(2))
+local tipOwn = {}
+GameTooltip.AddDoubleLine = function(_, l, r) tipOwn[#tipOwn + 1] = strip(l) .. " = " .. strip(r) end
+GameTooltip.AddLine = function(_, l) tipOwn[#tipOwn + 1] = strip(l) end
+GameTooltip.SetText = function(_, l) tipOwn[#tipOwn + 1] = strip(l) end
+win.rows[2]:GetScript("OnEnter")(win.rows[2])
+local ownText = table.concat(tipOwn, "\n")
+T.ok("tooltip shows both profits", ownText:find("Profit if you buy everything = +93c", 1, true)
+     and ownText:find("Profit using your mats = +1s 43c", 1, true), ownText)
+-- Light Leather would sell for 50c - 5% = 47.5c; crafting the kit with it: 142.5 - 47.5 = 95c more
+T.ok("...and crafting vs selling the mats raw", ownText:find("Your mats would sell for 48c on the AH. Crafting earns 95c more than selling them raw.", 1, true), ownText)
+-- Only some of the mats: 1 Light Leather in bags, boots need 2 -> buy 1 (50c), thread is yours
+M.setBags({ [0] = { [1] = { id = 2318, count = 1 }, [2] = { id = 2320, count = 1 } } })
+M.fire("BAG_UPDATE_DELAYED")
+local bootsRow
+for i = 1, 3 do if rowText(i):find("^Handstitched Leather Boots") then bootsRow = i end end
+T.ok("own mats: only pays for what you're missing", bootsRow and rowText(bootsRow) == "Handstitched Leather Boots | 50c | 3s 80c | +3s 30c | 0",
+     bootsRow and rowText(bootsRow))
+M.setBags({ [0] = { [1] = { id = 2318, count = 5 }, [2] = { id = 2320, count = 1 } } })
+win.ownMats:SetChecked(false)
+win.ownMats:GetScript("OnClick")(win.ownMats)
+T.ok("turning it off goes back to buying everything", rowText(1) == "Handstitched Leather Boots | 1s 10c | 3s 80c | +2s 70c | 1", rowText(1))
+
 -- Recipe tooltip breaks down the reagents
 local tip = {}
 GameTooltip.AddDoubleLine = function(_, l, r) tip[#tip + 1] = strip(l) .. " = " .. strip(r) end

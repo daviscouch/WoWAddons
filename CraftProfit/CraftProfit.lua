@@ -147,15 +147,39 @@ local function RecipeSource(r)
 end
 
 -- Cost, value and profit for one recipe
+-- For one craft. "Buy" = pay for every reagent. "Own" = reagents already in your bags are free and you
+-- only pay for the rest. matsValue = what the mats you'd use would sell for on the AH instead.
 local function Evaluate(r)
   local cost, missing = 0, false
+  local ownCost, ownMissing, owned = 0, false, 0
+  local matsValue, matsUnknown = 0, false
   for _, g in ipairs(r.reagents) do
     local p = ReagentPrice(g.itemID)
     if p then cost = cost + p * g.count else missing = true end
+    local have = (GetCount and GetCount(g.itemID)) or 0
+    local use = math.min(have, g.count)
+    local buy = g.count - use
+    owned = owned + use
+    if buy > 0 then
+      if p then ownCost = ownCost + p * buy else ownMissing = true end
+    end
+    if use > 0 then
+      -- What you'd get for them instead: auction price after the cut, else what a vendor pays
+      local ah = AH(g.itemID)
+      local raw = ah and ah * (1 - AH_CUT) or select(11, GetInfo(g.itemID))
+      if raw then matsValue = matsValue + raw * use else matsUnknown = true end
+    end
   end
   local unit, t, none = AH(r.output)
   local value = unit and unit * r.qty * (1 - AH_CUT)
-  local profit = (value and not missing) and (value - cost) or nil
+  local buyProfit = (value and not missing) and (value - cost) or nil
+  local ownProfit = (value and not ownMissing) and (value - ownCost) or nil
+  -- Crafting with your mats vs selling those mats raw
+  local vsRaw = (ownProfit and owned > 0 and not matsUnknown) and (ownProfit - matsValue) or nil
+  local useOwn = CraftProfitDB.ownMats
+  local shownCost = useOwn and ((not ownMissing) and ownCost or nil) or ((not missing) and cost or nil)
+  local profit = useOwn and ownProfit or buyProfit
+  missing = useOwn and ownMissing or missing
   -- How many you can make from your bags
   local canMake
   for _, g in ipairs(r.reagents) do
@@ -164,8 +188,9 @@ local function Evaluate(r)
     canMake = canMake and math.min(canMake, n) or n
   end
   if not r.learned then canMake = 0 end
-  return { cost = (not missing) and cost or nil, partialCost = cost, missing = missing, value = value,
-           profit = profit, age = t, noneListed = none, canMake = canMake or 0 }
+  return { cost = shownCost, missing = missing, value = value, profit = profit, age = t, noneListed = none,
+           canMake = canMake or 0, buyProfit = buyProfit, ownProfit = ownProfit, owned = owned,
+           matsValue = (owned > 0 and not matsUnknown) and matsValue or nil, vsRaw = vsRaw }
 end
 
 -- Items to look up at the AH: every reagent and output of the recipes in the window
@@ -376,6 +401,21 @@ win.title = win:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 win.title:SetPoint("TOPLEFT", 12, -10)
 win.close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
 win.close:SetPoint("TOPRIGHT", 0, 0)
+win.ownMats = CreateFrame("CheckButton", nil, win, "UICheckButtonTemplate")
+win.ownMats:SetSize(24, 24)
+win.ownMats:SetPoint("TOPRIGHT", -170, -6)
+win.ownMats.label = win:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+win.ownMats.label:SetPoint("LEFT", win.ownMats, "RIGHT", 2, 0)
+win.ownMats.label:SetText("Count my mats as free")
+win.ownMats:SetScript("OnClick", function(self) CraftProfitDB.ownMats = self:GetChecked() and true or false UpdateUI() end)
+win.ownMats:SetScript("OnEnter", function(self)
+  GameTooltip:SetOwner(self, "ANCHOR_TOP")
+  GameTooltip:SetText("Count my mats as free")
+  GameTooltip:AddLine("Reagents already in your bags (from skinning, drops...) cost nothing; you only pay for what you'd "
+      .. "still have to buy. Hover a recipe to compare with selling those mats on the auction house instead.", 1, 1, 1, true)
+  GameTooltip:Show()
+end)
+win.ownMats:SetScript("OnLeave", function() GameTooltip:Hide() end)
 win.status = win:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 win.status:SetPoint("TOPLEFT", 12, -32)
 win.status:SetWidth(WIDTH - 24)
@@ -496,10 +536,21 @@ local function ReagentTooltip(row)
     GameTooltip:AddLine("Can't craft right now - missing: " .. table.concat(short, ", "), 1, 0.4, 0.4, true)
   end
   GameTooltip:AddLine(" ")
-  GameTooltip:AddDoubleLine("Cost to make", Money(e.cost), 1, 0.82, 0, 1, 1, 1)
+  GameTooltip:AddDoubleLine(CraftProfitDB.ownMats and "Cost to make (your mats free)" or "Cost to make", Money(e.cost), 1, 0.82, 0, 1, 1, 1)
   if e.value then
     GameTooltip:AddDoubleLine("Sells for (after 5% AH cut)", Money(e.value), 1, 0.82, 0, 1, 1, 1)
     GameTooltip:AddLine("Auction price from " .. Age(e.age), 0.6, 0.6, 0.6)
+    if e.owned > 0 then
+      local function colored(p) return p and ((p >= 0 and "|cff33ff33" or "|cffff4040") .. Money(p, true) .. "|r") or "|cff888888?|r" end
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddDoubleLine("Profit if you buy everything", colored(e.buyProfit), 1, 0.82, 0, 1, 1, 1)
+      GameTooltip:AddDoubleLine("Profit using your mats", colored(e.ownProfit), 1, 0.82, 0, 1, 1, 1)
+      if e.vsRaw and e.matsValue then
+        GameTooltip:AddLine("Your mats would sell for " .. Money(e.matsValue) .. " on the AH. Crafting earns "
+            .. Money(math.abs(e.vsRaw)) .. (e.vsRaw >= 0 and " more" or " less") .. " than selling them raw.",
+            e.vsRaw >= 0 and 0.2 or 1, e.vsRaw >= 0 and 1 or 0.4, e.vsRaw >= 0 and 0.2 or 0.4, true)
+      end
+    end
   elseif e.noneListed then
     GameTooltip:AddLine("None on the auction house at the last scan.", 1, 0.4, 0.4)
   else
@@ -630,6 +681,7 @@ function UpdateUI()
   win.scanFull:SetEnabled(ahOpen and not scan and wait <= 0)
   win.makeable:SetChecked(CraftProfitDB.onlyMakeable and true or false)
   win.unlearned:SetChecked(CraftProfitDB.showUnlearned and true or false)
+  win.ownMats:SetChecked(CraftProfitDB.ownMats and true or false)
 end
 
 local function PlaceWindow()
